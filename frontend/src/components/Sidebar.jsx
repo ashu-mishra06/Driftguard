@@ -44,12 +44,12 @@ function Sidebar() {
   >
     Prediction
   </NavLink>
-{/* <NavLink
+<NavLink
   to="/validation"
   className={({ isActive }) => isActive ? "active" : ""}
 >
   Validation
-</NavLink> */}
+</NavLink>
 </nav>
 
     </aside>

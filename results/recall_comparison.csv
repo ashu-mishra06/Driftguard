@@ -1,0 +1,6 @@
+method,dataset,recall_pct
+Module A,V1 held-out,80.95238095238095
+Module A,V2 blind,61.0
+Module B,V1 held-out,66.66666666666666
+Module B,V2 blind,69.0
+Static baseline,V2 blind,11.0

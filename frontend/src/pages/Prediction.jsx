@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -10,368 +9,147 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import {
-  loadCSVData,
-  getComponentIds,
-  getComponentData,
-} from "../utils/csvData";
+import { loadCSVData, getComponentIds, getComponentData } from "../utils/csvData";
+import { loadAnalysisResults, getAnalysisForComponent } from "../utils/analysisStore";
 
-function Prediction() {
+function Prediction({ analysisResults = [] }) {
   const [data, setData] = useState([]);
   const [componentIds, setComponentIds] = useState([]);
-  const [selectedComponent, setSelectedComponent] =
-    useState("");
-  const [analysisResults, setAnalysisResults] = useState([]);
+  const [selectedComponent, setSelectedComponent] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadPredictionData() {
-      try {
-        // Load uploaded CSV data
-        const csv = await loadCSVData();
-
-        setData(csv);
-
-        const ids = getComponentIds(csv);
-
-        setComponentIds(ids);
-
-        if (ids.length > 0) {
-          setSelectedComponent(ids[0]);
-        }
-
-        // Load FastAPI analysis results
-        const storedResults =
-          localStorage.getItem("burnInAnalysisResults");
-
-        if (storedResults) {
-          setAnalysisResults(JSON.parse(storedResults));
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error(
-          "Failed to load prediction data:",
-          error
-        );
-        setLoading(false);
-      }
-    }
-
-    loadPredictionData();
-  }, []);
-
-  if (loading) {
-    return <div>Loading prediction data...</div>;
-  }
-
-  const rows = getComponentData(
-    data,
-    selectedComponent
+  const effectiveResults = useMemo(
+    () => (analysisResults.length ? analysisResults : loadAnalysisResults()),
+    [analysisResults]
   );
 
-  if (rows.length === 0) {
+  useEffect(() => {
+    loadCSVData()
+      .then((csv) => {
+        setData(csv);
+        const ids = getComponentIds(csv);
+        setComponentIds(ids);
+        setSelectedComponent((current) => current || ids[0] || "");
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Failed to load prediction data:", error);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) return <div>Loading prediction data...</div>;
+
+  const rows = getComponentData(data, selectedComponent);
+
+  if (!rows.length) {
     return <div>No component data found.</div>;
   }
 
   const component = rows[0];
-
-  // Find backend result for selected component
-  const analysis = analysisResults.find(
-    (result) =>
-      result.component_id === selectedComponent
-  );
-
+  const analysis = getAnalysisForComponent(effectiveResults, selectedComponent);
   const moduleB = analysis?.module_b;
+  const finalVerdict = analysis?.final_verdict || "NOT ANALYZED";
 
-  const finalVerdict =
-    analysis?.final_verdict || "NOT ANALYZED";
+  const leakage0 = rows.find((row) => row.timestamp_h === 0)?.leakage_uA ?? 0;
+  const leakage24 = rows.find((row) => row.timestamp_h === 24)?.leakage_uA ?? 0;
+  const leakage168 = rows.find((row) => row.timestamp_h === 168)?.leakage_uA ?? 0;
+  const earlyDriftRate = (Number(leakage24) - Number(leakage0)) / 24;
 
-  const leakage0 =
-    rows.find(
-      (row) => row.timestamp_h === 0
-    )?.leakage_uA ?? 0;
+  const predictionMap = moduleB?.predicted_168h || {};
+  const leakagePredicted168 = predictionMap.leakage ?? null;
+  const maxDriftRatio = moduleB?.max_drift_ratio ?? null;
+  const threshold = moduleB?.threshold_multiplier ?? 1.25;
+  const dominantParameter =
+    moduleB?.dominant_parameter ?? moduleB?.dominantParameter ?? "—";
 
-  const leakage24 =
-    rows.find(
-      (row) => row.timestamp_h === 24
-    )?.leakage_uA ?? 0;
+  const moduleBFlagged = Boolean(moduleB?.flagged ?? moduleB?.flag);
 
-  const leakage168 =
-    rows.find(
-      (row) => row.timestamp_h === 168
-    )?.leakage_uA ?? 0;
+  const trajectory = rows.map((row) => ({
+    time: `${row.timestamp_h}h`,
+    actual: row.leakage_uA,
+  }));
 
-  // Early drift is kept as a descriptive measurement.
-  // It is NOT used for the final screening decision.
-  const earlyDriftRate =
-    (leakage24 - leakage0) / 24;
-
-  // Try the common backend prediction field names
-  const predictedDrift =
-    moduleB?.predicted_drift_rate ??
-    moduleB?.predicted_drift ??
-    moduleB?.drift_rate ??
-    null;
-
-  const safetySlope =
-    moduleB?.safety_slope ??
-    moduleB?.threshold ??
-    null;
-
-  const moduleBFlagged =
-    moduleB?.flagged;
+  if (leakagePredicted168 !== null) {
+    trajectory.push({ time: "168h predicted", actual: null, predicted: leakagePredicted168 });
+  }
 
   return (
     <div className="prediction-page">
-
       <div className="page-heading">
-
-        <h2>
-          Prediction
-        </h2>
-
-        <p>
-          Module B drift prediction from the FastAPI
-          screening pipeline.
-        </p>
-
+        <h2>Prediction</h2>
+        <p>Module B XGBoost 168h drift prediction from the FastAPI screening pipeline.</p>
       </div>
 
       <div className="prediction-controls">
-
-        <label>
-          Select Component
-        </label>
-
-        <select
-          value={selectedComponent}
-          onChange={(e) =>
-            setSelectedComponent(e.target.value)
-          }
-        >
-
-          {componentIds.map((id) => (
-            <option
-              key={id}
-              value={id}
-            >
-              {id}
-            </option>
-          ))}
-
+        <label>Select Component</label>
+        <select value={selectedComponent} onChange={(e) => setSelectedComponent(e.target.value)}>
+          {componentIds.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
-
       </div>
 
       <div className="prediction-component-info">
-
-        <strong>
-          Component:
-        </strong>{" "}
-        {component.component_id}
-
-        {" | "}
-
-        <strong>
-          Lot:
-        </strong>{" "}
-        {component.lot_id}
-
+        <strong>Component:</strong> {component.component_id} {" | "}
+        <strong>Lot:</strong> {component.lot_id}
       </div>
 
       <div className="prediction-summary-grid">
-
-        <div className="prediction-stat-card">
-
-          <span>
-            Leakage 0h
-          </span>
-
-          <strong>
-            {leakage0.toFixed(3)} µA
-          </strong>
-
-        </div>
-
-        <div className="prediction-stat-card">
-
-          <span>
-            Leakage 24h
-          </span>
-
-          <strong>
-            {leakage24.toFixed(3)} µA
-          </strong>
-
-        </div>
-
-        <div className="prediction-stat-card">
-
-          <span>
-            Leakage 168h
-          </span>
-
-          <strong>
-            {leakage168.toFixed(3)} µA
-          </strong>
-
-        </div>
-
-        <div className="prediction-stat-card">
-
-          <span>
-            Early Drift Rate
-          </span>
-
-          <strong>
-            {earlyDriftRate.toFixed(4)} µA/hr
-          </strong>
-
-        </div>
-
+        <div className="prediction-stat-card"><span>Leakage 0h</span><strong>{Number(leakage0).toFixed(3)} µA</strong></div>
+        <div className="prediction-stat-card"><span>Leakage 24h</span><strong>{Number(leakage24).toFixed(3)} µA</strong></div>
+        <div className="prediction-stat-card"><span>Leakage 168h</span><strong>{Number(leakage168).toFixed(3)} µA</strong></div>
+        <div className="prediction-stat-card"><span>Early Drift Rate</span><strong>{earlyDriftRate.toFixed(4)} µA/hr</strong></div>
       </div>
 
       <div className="prediction-section">
-
-        <h3>
-          Leakage Time Series
-        </h3>
-
-        <ResponsiveContainer
-          width="100%"
-          height={350}
-        >
-
-          <LineChart data={rows}>
-
+        <h3>Leakage Time Series</h3>
+        <ResponsiveContainer width="100%" height={350}>
+          <LineChart data={trajectory}>
             <CartesianGrid strokeDasharray="3 3" />
-
-            <XAxis
-              dataKey="timestamp_h"
-            />
-
+            <XAxis dataKey="time" />
             <YAxis />
-
             <Tooltip />
-
-            <Line
-              type="monotone"
-              dataKey="leakage_uA"
-              stroke="#2563eb"
-              strokeWidth={3}
-            />
-
+            <Line type="monotone" dataKey="actual" stroke="#2563eb" strokeWidth={3} name="Measured" />
+            <Line type="monotone" dataKey="predicted" stroke="#dc2626" strokeWidth={3} strokeDasharray="8 5" name="Predicted 168h" />
           </LineChart>
-
         </ResponsiveContainer>
-
       </div>
 
       <div className="prediction-summary-grid">
-
         <div className="prediction-stat-card">
-
-          <span>
-            Predicted Drift Rate
-          </span>
-
-          <strong>
-            {predictedDrift !== null
-              ? Number(predictedDrift).toFixed(4)
-              : "N/A"}
-          </strong>
-
+          <span>Predicted Leakage 168h</span>
+          <strong>{leakagePredicted168 !== null ? `${Number(leakagePredicted168).toFixed(3)} µA` : "N/A"}</strong>
         </div>
-
         <div className="prediction-stat-card">
-
-          <span>
-            Safety Slope
-          </span>
-
-          <strong>
-            {safetySlope !== null
-              ? Number(safetySlope).toFixed(4)
-              : "N/A"}
-          </strong>
-
+          <span>Max Drift Ratio</span>
+          <strong>{maxDriftRatio !== null ? `${Number(maxDriftRatio).toFixed(2)}×` : "N/A"}</strong>
         </div>
-
         <div className="prediction-stat-card">
-
-          <span>
-            Module B
-          </span>
-
-          <strong>
-            {moduleBFlagged === undefined
-              ? "N/A"
-              : moduleBFlagged
-              ? "FLAGGED"
-              : "NORMAL"}
-          </strong>
-
+          <span>Threshold</span>
+          <strong>{Number(threshold).toFixed(2)}×</strong>
         </div>
-
         <div className="prediction-stat-card">
-
-          <span>
-            Final Verdict
-          </span>
-
-          <strong>
-            {finalVerdict}
-          </strong>
-
+          <span>Module B</span>
+          <strong>{moduleB ? (moduleBFlagged ? "FLAGGED" : "CLEAR") : "N/A"}</strong>
         </div>
-
       </div>
 
       <div className="prediction-verdict-card">
-
-        <h3>
-          Module B Drift Prediction
-        </h3>
-
+        <h3>Module B Drift Prediction</h3>
         {moduleB ? (
           <>
-            <h2>
-              {moduleBFlagged
-                ? "DRIFT FLAGGED"
-                : "DRIFT WITHIN LIMIT"}
-            </h2>
-
-            <p>
-              {moduleB.reason ||
-                "Module B prediction completed successfully."}
-            </p>
-
-            {analysis?.explanation && (
-              <p>
-                <strong>
-                  Screening explanation:
-                </strong>{" "}
-                {analysis.explanation}
-              </p>
-            )}
+            <h2>{moduleBFlagged ? "DRIFT FLAGGED" : "DRIFT WITHIN LIMIT"}</h2>
+            <p><strong>Dominant parameter:</strong> {dominantParameter}</p>
+            <p>{moduleB.reason || moduleB.dominant_reason || "XGBoost prediction completed successfully."}</p>
+            <p><strong>Final Verdict:</strong> {finalVerdict}</p>
+            {analysis?.explanation && <p><strong>Screening explanation:</strong> {analysis.explanation}</p>}
           </>
         ) : (
           <>
-            <h2>
-              NOT ANALYZED
-            </h2>
-
-            <p>
-              No Module B result was found for this
-              component. Upload and analyze the CSV
-              before viewing backend predictions.
-            </p>
+            <h2>NOT ANALYZED</h2>
+            <p>No backend result was found for this component. Upload and analyze the CSV first.</p>
           </>
         )}
-
       </div>
-
     </div>
   );
 }

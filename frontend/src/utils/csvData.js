@@ -1,122 +1,219 @@
 // src/utils/csvData.js
+// The production input contract is WIDE format.
+// UI pages use normalized LONG rows because that is convenient for charts.
 
-export async function loadCSVData() {
-  // First try to use the CSV uploaded by the user.
-  const uploadedCSV = localStorage.getItem(
-    "burnInUploadedCSV"
-  );
+import {
+  UPLOADED_CSV_STORAGE_KEY,
+} from "./analysisStore";
 
-  // If an uploaded CSV exists, use it.
-  // Otherwise, fall back to the demo CSV.
-  const text = uploadedCSV
-    ? uploadedCSV
-    : await loadDemoCSV();
+const REQUIRED_WIDE_COLUMNS = [
+  "component_id",
+  "lot_id",
+  "iddq_0h",
+  "iddq_24h",
+  "iddq_96h",
+  "iddq_168h",
+  "leakage_0h",
+  "leakage_24h",
+  "leakage_96h",
+  "leakage_168h",
+  "prop_delay_0h",
+  "prop_delay_24h",
+  "prop_delay_96h",
+  "prop_delay_168h",
+];
 
-  return parseCSV(text);
-}
+function parseCSVLine(line) {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
 
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
 
-// Load the original demo CSV from /public
-async function loadDemoCSV() {
-  const response = await fetch(
-    "/synthetic_components_500.csv"
-  );
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
 
-  if (!response.ok) {
-    throw new Error(
-      "CSV file could not be loaded."
-    );
+    if (char === "," && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
   }
 
-  return await response.text();
+  values.push(current.trim());
+  return values;
 }
 
-
-// Convert CSV text into JavaScript objects
-function parseCSV(text) {
+function parseCSVRows(text) {
   const lines = text
     .split(/\r?\n/)
     .filter((line) => line.trim() !== "");
 
   if (lines.length < 2) {
-    throw new Error(
-      "CSV file is empty or contains no data."
-    );
+    throw new Error("CSV is empty or contains no data rows.");
   }
 
-  const headers = lines[0]
-    .split(",")
-    .map((header) => header.trim());
+  const headers = parseCSVLine(lines[0]).map((header) => header.trim());
 
-  const data = lines.slice(1).map((line) => {
-    const values = line.split(",");
-
+  return lines.slice(1).map((line, rowIndex) => {
+    const values = parseCSVLine(line);
     const row = {};
 
     headers.forEach((header, index) => {
-      row[header] =
-        values[index]?.trim() || "";
+      row[header] = values[index] ?? "";
     });
 
-    return {
-      component_id: row.component_id,
-      lot_id: row.lot_id,
-      timestamp_h: Number(row.timestamp_h),
-      iddq_uA: Number(row.iddq_uA),
-      leakage_uA: Number(row.leakage_uA),
-      prop_delay_ns: Number(row.prop_delay_ns),
-      defective: Number(row.defective),
-    };
-  });
+    if (!row.component_id || !row.lot_id) {
+      throw new Error(
+        `CSV row ${rowIndex + 2} is missing component_id or lot_id.`
+      );
+    }
 
-  return data;
+    return row;
+  });
 }
 
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function hasWideSchema(headers) {
+  return REQUIRED_WIDE_COLUMNS.every((column) => headers.includes(column));
+}
+
+function hasLegacyLongSchema(headers) {
+  const required = [
+    "component_id",
+    "lot_id",
+    "timestamp_h",
+    "iddq_uA",
+    "leakage_uA",
+    "prop_delay_ns",
+  ];
+
+  return required.every((column) => headers.includes(column));
+}
+
+function normalizeWideRows(rawRows) {
+  const timestamps = [0, 24, 96, 168];
+
+  return rawRows.flatMap((raw) =>
+    timestamps.map((timestamp) => ({
+      component_id: String(raw.component_id),
+      lot_id: String(raw.lot_id),
+      timestamp_h: timestamp,
+      iddq_uA: toNumber(raw[`iddq_${timestamp}h`]),
+      leakage_uA: toNumber(raw[`leakage_${timestamp}h`]),
+      prop_delay_ns: toNumber(raw[`prop_delay_${timestamp}h`]),
+      // `is_defective` is ground truth only. It is never sent to the model.
+      is_defective:
+        raw.is_defective === undefined || raw.is_defective === ""
+          ? null
+          : Number(raw.is_defective),
+      defective:
+        raw.is_defective === undefined || raw.is_defective === ""
+          ? 0
+          : Number(raw.is_defective),
+      archetype: raw.archetype || "",
+      curve_shape: raw.curve_shape || "",
+      hidden_within_limits:
+        raw.hidden_within_limits === ""
+          ? null
+          : String(raw.hidden_within_limits).toLowerCase() === "true",
+    }))
+  );
+}
+
+function normalizeLegacyRows(rawRows) {
+  return rawRows.map((raw, index) => ({
+    component_id: String(raw.component_id),
+    lot_id: String(raw.lot_id),
+    timestamp_h: Number(raw.timestamp_h),
+    iddq_uA: toNumber(raw.iddq_uA),
+    leakage_uA: toNumber(raw.leakage_uA),
+    prop_delay_ns: toNumber(raw.prop_delay_ns),
+    is_defective:
+      raw.is_defective !== undefined
+        ? toNumber(raw.is_defective)
+        : toNumber(raw.defective),
+    defective:
+      raw.is_defective !== undefined
+        ? toNumber(raw.is_defective)
+        : toNumber(raw.defective),
+    archetype: raw.archetype || "",
+    curve_shape: raw.curve_shape || "",
+    hidden_within_limits:
+      raw.hidden_within_limits === undefined
+        ? null
+        : String(raw.hidden_within_limits).toLowerCase() === "true",
+  }));
+}
+
+export function parseCSV(text) {
+  const rawRows = parseCSVRows(text);
+  const headers = Object.keys(rawRows[0] || {});
+
+  if (hasWideSchema(headers)) {
+    return normalizeWideRows(rawRows);
+  }
+
+  if (hasLegacyLongSchema(headers)) {
+    return normalizeLegacyRows(rawRows);
+  }
+
+  throw new Error(
+    "Unsupported CSV schema. Expected the final wide DriftGuard schema or the legacy long-format demo schema."
+  );
+}
+
+export async function loadCSVData() {
+  const uploadedCSV = localStorage.getItem(UPLOADED_CSV_STORAGE_KEY);
+
+  const text = uploadedCSV || (await loadDemoCSV());
+  return parseCSV(text);
+}
+
+async function loadDemoCSV() {
+  const response = await fetch("/synthetic_components_500.csv");
+
+  if (!response.ok) {
+    throw new Error("Demo CSV could not be loaded.");
+  }
+
+  return response.text();
+}
 
 export function getComponentIds(data) {
   return [
-    ...new Set(
-      data.map(
-        (item) => item.component_id
-      )
-    ),
+    ...new Set((data || []).map((item) => String(item.component_id))),
   ];
 }
-
 
 export function getLotIds(data) {
   return [
-    ...new Set(
-      data.map(
-        (item) => item.lot_id
-      )
-    ),
+    ...new Set((data || []).map((item) => String(item.lot_id))),
   ];
 }
 
-
-export function getComponentData(
-  data,
-  componentId
-) {
-  return data
-    .filter(
-      (item) =>
-        item.component_id === componentId
-    )
-    .sort(
-      (a, b) =>
-        a.timestamp_h - b.timestamp_h
-    );
+export function getComponentData(data, componentId) {
+  return (data || [])
+    .filter((item) => String(item.component_id) === String(componentId))
+    .sort((a, b) => Number(a.timestamp_h) - Number(b.timestamp_h));
 }
 
-
-export function getLotData(
-  data,
-  lotId
-) {
-  return data.filter(
-    (item) =>
-      item.lot_id === lotId
+export function getLotData(data, lotId) {
+  return (data || []).filter(
+    (item) => String(item.lot_id) === String(lotId)
   );
 }

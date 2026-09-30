@@ -1,0 +1,89 @@
+{
+  "module_a": {
+    "v1_held_out_runtime_stats": {
+      "tp": 17,
+      "fp": 7,
+      "fn": 4,
+      "tn": 212,
+      "accuracy": 0.9541666666666667,
+      "precision": 0.7083333333333334,
+      "recall": 0.8095238095238095,
+      "specificity": 0.9680365296803652,
+      "f1": 0.7555555555555555
+    },
+    "v2_blind": {
+      "tp": 61,
+      "fp": 4,
+      "fn": 39,
+      "tn": 896,
+      "accuracy": 0.957,
+      "precision": 0.9384615384615385,
+      "recall": 0.61,
+      "specificity": 0.9955555555555555,
+      "f1": 0.7393939393939394
+    }
+  },
+  "module_b": {
+    "v1_held_out": {
+      "tp": 14,
+      "fp": 2,
+      "fn": 7,
+      "tn": 217,
+      "accuracy": 0.9625,
+      "precision": 0.875,
+      "recall": 0.6666666666666666,
+      "specificity": 0.9908675799086758,
+      "f1": 0.7567567567567568
+    },
+    "v2_blind": {
+      "tp": 69,
+      "fp": 370,
+      "fn": 31,
+      "tn": 530,
+      "accuracy": 0.599,
+      "precision": 0.1571753986332574,
+      "recall": 0.69,
+      "specificity": 0.5888888888888889,
+      "f1": 0.2560296846011132
+    }
+  },
+  "static_baseline": {
+    "v2_blind": {
+      "tp": 11,
+      "fp": 0,
+      "fn": 89,
+      "tn": 900,
+      "accuracy": 0.911,
+      "precision": 1.0,
+      "recall": 0.11,
+      "specificity": 1.0,
+      "f1": 0.1981981981981982
+    }
+  },
+  "combined_verdict": {
+    "v2_counts": {
+      "REJECT": 53,
+      "FLAG_FOR_REVIEW": 401,
+      "PASS": 546
+    },
+    "reject_precision": 0.9622641509433962,
+    "reject_recall": 0.51
+  },
+  "hidden_defects_v2": {
+    "total": 69,
+    "module_a_detected": 38,
+    "module_a_recall": 0.5507246376811594,
+    "module_b_detected": 45,
+    "module_b_recall": 0.6521739130434783
+  },
+  "flag_counts_v2": {
+    "module_a": 65,
+    "module_b": 439
+  },
+  "locked_rules": {
+    "module_a_threshold": 4.5,
+    "module_a_tolerance": 0.02,
+    "module_b_threshold": 1.25,
+    "module_b_drift_formula": "max(abs(pred_168h-v0), abs(pred_168h-v24)) / (safety_slope*168h)"
+  }
+}

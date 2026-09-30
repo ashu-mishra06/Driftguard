@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
@@ -14,35 +13,28 @@ import Prediction from "./pages/Prediction.jsx";
 import DataUpload from "./pages/DataUpload.jsx";
 import Validation from "./pages/Validation.jsx";
 
+import { loadAnalysisResults } from "./utils/analysisStore.js";
+
 function App() {
-  // --------------------------------------------------
-  // CSV FILE STATE
-  // --------------------------------------------------
-  // Stores all uploaded CSV files.
+  // Uploaded files are kept in memory for the current UI session.
   const [files, setFiles] = useState([]);
-
-  // Stores which uploaded CSV is currently selected.
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [analysisResults, setAnalysisResults] = useState([]);
 
-  const [validationResults, setValidationResults] = useState(null);
+  // IMPORTANT: initialize this from persisted backend results so a page refresh
+  // does not make all downstream sections appear empty.
+  const [analysisResults, setAnalysisResults] = useState(() =>
+    loadAnalysisResults()
+  );
 
   return (
     <div className="app">
-
       <Sidebar />
 
       <div className="main-area">
-
         <Header />
 
         <main className="content">
-
           <Routes>
-
-            {/* =========================================
-                DATA UPLOAD
-                ========================================= */}
             <Route
               path="/"
               element={
@@ -57,85 +49,40 @@ function App() {
               }
             />
 
-            {/* =========================================
-                DASHBOARD
-                ========================================= */}
             <Route
               path="/dashboard"
-              element={
-                <Dashboard
-                  analysisResults={analysisResults}
-                />
-              }
+              element={<Dashboard analysisResults={analysisResults} />}
             />
 
-            {/* =========================================
-                COMPONENTS
-                ========================================= */}
             <Route
               path="/components"
-              element={
-                <Components
-                  analysisResults={analysisResults}
-                />
-              }
+              element={<Components analysisResults={analysisResults} />}
             />
 
-            {/* =========================================
-                COMPONENT DETAILS
-                ========================================= */}
             <Route
               path="/components/:id"
               element={
-                <ComponentDetails
-                  analysisResults={analysisResults}
-                />
+                <ComponentDetails analysisResults={analysisResults} />
               }
             />
 
-            {/* =========================================
-                LOT ANALYSIS
-                ========================================= */}
             <Route
               path="/lot-analysis"
-              element={
-                <LotAnalysis
-                  analysisResults={analysisResults}
-                />
-              }
+              element={<LotAnalysis analysisResults={analysisResults} />}
             />
 
-            {/* =========================================
-                PREDICTION
-                ========================================= */}
             <Route
               path="/prediction"
-              element={
-                <Prediction
-                  analysisResults={analysisResults}
-                />
-              }
+              element={<Prediction analysisResults={analysisResults} />}
             />
 
-            {/* =========================================
-                VALIDATION / STRESS TEST
-                ========================================= */}
             <Route
               path="/validation"
-              element={
-                <Validation
-                  validationResults={validationResults}
-                  setValidationResults={setValidationResults}
-                />
-              }
+              element={<Validation analysisResults={analysisResults} />}
             />
-
           </Routes>
-
         </main>
-
       </div>
-
     </div>
   );
 }

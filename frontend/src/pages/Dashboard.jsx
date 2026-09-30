@@ -834,7 +834,7 @@ function Dashboard({ analysisResults = [] }) {
             </h3>
 
             <p>
-              Log-linear drift prediction compared
+              XGBoost prediction of 168h drift compared
               with the global safety slope.
             </p>
 
