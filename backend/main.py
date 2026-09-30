@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Dict, List, Optional
@@ -22,13 +23,24 @@ app = FastAPI(
 )
 
 
+# Local dev origins are always allowed. Add deployed frontend URLs through the
+# ALLOWED_ORIGINS environment variable (comma-separated, no trailing slash).
+_DEFAULT_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+_extra_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=_DEFAULT_ORIGINS + _extra_origins,
+    # Optional: allow Vercel preview URLs, e.g. ALLOWED_ORIGIN_REGEX=https://.*\\.vercel\\.app
+    allow_origin_regex=os.getenv("ALLOWED_ORIGIN_REGEX") or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -3,6 +3,7 @@ import {
   saveAnalysisPayload,
   saveUploadedCSV,
 } from "../utils/analysisStore";
+import { API_BASE_URL } from "../services/driftguardApi";
 
 function DataUpload({
   files,
@@ -100,7 +101,7 @@ function DataUpload({
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await fetch("http://localhost:8000/analyze", {
+      const response = await fetch(`${API_BASE_URL}/analyze`, {
         method: "POST",
         body: formData,
       });
@@ -161,7 +162,7 @@ function DataUpload({
         String(err.message).includes("NetworkError")
       ) {
         setError(
-          "Could not connect to FastAPI. Make sure the backend is running on localhost:8000."
+          `Could not connect to the DriftGuard backend at ${API_BASE_URL}. If it is hosted on a free tier, wait ~60 seconds for it to wake up and try again.`
         );
       } else {
         setError(`Analysis failed: ${err.message}`);
