@@ -364,11 +364,13 @@ We would rather you hear these from us:
 
 | Member | Contribution |
 |---|---|
-| **Satvik** | Module B (XGBoost), Module A supervision, domain-shift stress test, integration |
-| **Mohit** | Module A (robust statistics, signature matching), V2 stress-test dataset |
-| **Ashutosh** | FastAPI backend integration, API contract, verdict pipeline |
-| **Akanksha** | Dashboard UI/UX, demo video |
+| **Ashutosh** | FastAPI backend integration, API contract, verdict pipeline, V2 stress-test dataset, demo video |
+| **Satvik** | Module B (XGBoost), Module A supervision, domain-shift stress test, integration, Presentation |
+| **Mohit** | Module A (robust statistics, signature matching)|
+| **Vivek** | Dashboard UI/UX, Presentation, Documentation |
 | **Rishi** | Presentation, documentation, proofreading |
+| **Akanksha** | Presentation, demo video |
+
 
 ## 13. References
 
